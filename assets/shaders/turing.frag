@@ -7,68 +7,71 @@ uniform sampler2D anchor; // iChannel1 equivalent
 in vec2 uv;
 out vec4 color;
 
-vec3 sx(vec2 x) {
-    return texture(target, x).xyz;
+float sx(vec2 x) {
+    return texture(target, x).x;
 }
 
-float noise(vec2 x) {
+float nx(vec2 x) {
     return texture(anchor, x).x;
 }
 
-vec3 nx(vec2 x) {
-    // simplex noise, make each channel different
 
-    vec3 n = vec3(
-        0.5 * (1.0 + sin(6.28318 * noise(1.0 * x))),
-        0.5 * (1.0 + sin(6.28318 * noise(0.6 * x))),
-        0.5 * (1.0 + sin(6.28318 * noise(0.3 * x)))
-    );
+const int OCTAVES = 6;
+const float PERSISTENCE = 0.5;
+const float LACUNARITY = 2.0;
 
-    return n;
+vec2 hash(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
 }
 
-vec3 average(int I, vec2 x) {
-    vec3 sum = vec3(0.0);
-    float weg = 0.0;
-    vec2 dx;
-    float d;
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+
+    vec2 u = f * f * (3.0 - 2.0 * f);
+
+    return mix(
+        mix(dot(hash(i + vec2(0.0, 0.0)), f - vec2(0.0, 0.0)),
+            dot(hash(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
+        mix(dot(hash(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)),
+            dot(hash(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float total = 0.0;
+    float amplitude = 1.0;
+    float frequency = 1.0;
+    float maxValue = 0.0;
     
-    for (int i = 1 - I; i < I; i++) {
-        for (int j = 1 - I; j < I; j++) {
-            dx = 1.0 * vec2(float(i), float(j)) / resolution;
-            d = exp(-length(dx));
-            weg += d;
-            sum += d * sx(x + dx);
-        }
+    for (int i = 0; i < OCTAVES; i++) {
+        total += noise(p * frequency) * amplitude;
+        maxValue += amplitude;
+        amplitude *= PERSISTENCE;
+        frequency *= LACUNARITY;
     }
-    return sum / weg;
+    
+    return total / maxValue;
 }
 
-vec3 gray(vec3 x) {
-    return vec3(dot(x, vec3(0.299, 0.587, 0.114)));
-}
-
-vec3 sigmoid(vec3 x) {
-    return 1.0 / (1.0 + exp(-x));
-}
-
-vec3 q(int a, int b, vec2 x) {
-    return average(a, x) - average(b, x);
-}
 
 void main() {
     vec2 x = uv;
 
-    vec3 col = vec3(0.0);
-
-    if (time < 0.01) {
-        col = nx(x);
-    } else {
-        col = sx(x)
-            - 0.11 * q(5, 2, x)
-            + 0.21 * q(3, 2, x) 
-            ;
+    float delta = 0.;
+    for (int i = -1; i < 2; i++) {
+        for (int j = -1; j < 2; j++) {
+            if (i == 0 && j == 0) continue;
+            vec2 dx = vec2(i, j) / resolution;
+            delta += (sx(x) - sx(x + dx)) / length(dx);
+        }
     }
 
-    color = vec4(col, 1.0);
+
+    if (time < 0.01) {
+        color = vec4(vec3(nx(x)), 1.);
+    }
+    else {
+        color = vec4(vec3(sx(x) - 0.001 * delta + 0.1 * fbm(x - 0.5 * time)), 1.);
+    }
 }
