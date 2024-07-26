@@ -139,7 +139,7 @@ public:
     }
 };
 
-class TuringPattern {
+class Sim {
     // two rendertargets for the pattern
     // one shader which takes in one rendertarget and outputs to the other
     std::shared_ptr<sf::Texture> anchor;
@@ -149,7 +149,7 @@ class TuringPattern {
     int current_target = 0;
 
     public:
-    TuringPattern(std::shared_ptr<sf::Texture> anchor, std::shared_ptr<sf::Shader> shader) : anchor(anchor), shader(shader), sprites{Sprite(anchor, shader), Sprite(anchor, shader)} {
+    Sim(std::shared_ptr<sf::Texture> anchor, std::shared_ptr<sf::Shader> shader) : anchor(anchor), shader(shader), sprites{Sprite(anchor, shader), Sprite(anchor, shader)} {
         for (int i = 0; i < 2; i++) {
             targets[i].create(anchor->getSize().x, anchor->getSize().y);
             targets[i].clear(sf::Color::Transparent);
@@ -201,18 +201,9 @@ int main()
 
     // setup ocean
     textures.load("noise", "assets/textures/noise.png");
-    shaders.load("ocean", "assets/shaders/default.vert", "assets/shaders/ocean.frag");
-    Sprite ocean_sprite(textures.get("noise"), shaders.get("ocean"));
-    ocean_sprite.setTransform(
-        MixedMeasure(0, 0), 
-        MixedMeasure(0, 0), 
-        MixedMeasure(0, 1), 
-        MixedMeasure(0, 1), 
-        0
-    );
 
     // create a low-res canvas for me to draw on
-    constexpr int res = 256;
+    constexpr int res = 512;
     sf::RenderTexture canvas;
     canvas.create(res, res * height / width);
     canvas.clear(sf::Color::Transparent);
@@ -229,13 +220,9 @@ int main()
         0
     );
 
-
     // turing pattern which uses the canvas sprite texture as the anchor
     shaders.load("turing", "assets/shaders/default.vert", "assets/shaders/turing.frag");
-    canvas.clear(sf::Color::Transparent);
-    ocean_sprite.draw(canvas, 0.);
-    canvas_texture.get()->update(canvas.getTexture());
-    TuringPattern ocean_pattern(canvas_texture, shaders.get("turing"));
+    Sim ocean_pattern(textures.get("noise"), shaders.get("turing"));
 
     float time = 0;
     auto start = std::chrono::high_resolution_clock::now();
@@ -251,30 +238,14 @@ int main()
         auto end = std::chrono::high_resolution_clock::now();
         time = std::chrono::duration<float>(end - start).count();
 
-        // alternative 1
-        //window.clear();
-        //ocean_sprite.draw(window, time);
-        //window.display();
 
-        // alternative 2
         canvas.clear(sf::Color::Transparent);
-        ocean_sprite.draw(canvas, time);
+        ocean_pattern.update(time);
+        ocean_pattern.draw(canvas);
         canvas_texture.get()->update(canvas.getTexture());
 
         window.clear();
         canvas_sprite.draw(window);
         window.display();
-
-        // alternative 3
-        //canvas.clear(sf::Color::Transparent);
-        //ocean_sprite.draw(canvas, time);
-        //canvas_texture.get()->update(canvas.getTexture());
-
-        //ocean_pattern.setAnchor(canvas_texture);
-        //ocean_pattern.update(time);
-
-        //window.clear();
-        //ocean_pattern.draw(window);
-        //window.display();
     }
 }
