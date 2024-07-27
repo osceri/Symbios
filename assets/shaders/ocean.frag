@@ -44,8 +44,7 @@ float fbm(vec2 p) {
     return total / maxValue;
 }
 
-
-void main() {
+vec4 ocean(vec2 x) {
     // Time-varying FBM
     float f = 0.0;
     float a = 0.8;
@@ -59,5 +58,11 @@ void main() {
     vec3 col = mix(vec3(0.0, 0.3, 0.5), vec3(0.0, 0.7, 1.0), f);
     col = mix(col, pow(col, vec3(0.1545)), 0.1);
 
-    color = vec4(col, 1.0);
+    return vec4(col, 1.0);
+}
+
+
+void main() {
+    vec4 col = ocean(uv);
+    color = col;
 }
