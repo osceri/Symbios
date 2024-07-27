@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <chrono>
 
+float _time;
+
 class Shaders {
     std::unordered_map<std::string, std::shared_ptr<sf::Shader>> shaders;
 public:
@@ -80,6 +82,8 @@ public:
     }
 };
 
+/*
+
 class Sprite {
     std::shared_ptr<sf::Texture> texture;
     std::shared_ptr<sf::Shader> shader;
@@ -139,52 +143,99 @@ public:
     }
 };
 
-class TuringPattern {
-    // two rendertargets for the pattern
-    // one shader which takes in one rendertarget and outputs to the other
-    std::shared_ptr<sf::Texture> anchor;
+*/
+
+class Filter {
     std::shared_ptr<sf::Shader> shader;
-    sf::RenderTexture targets[2];
-    Sprite sprites[2];
-    int current_target = 0;
+    std::shared_ptr<sf::Texture> texture;
+
+    sf::RenderTexture render_texture;
+    std::shared_ptr<sf::Texture> output;
+
+    // vertices of a quad
+    sf::VertexArray vertices;
+    float rotation = 0.;
+    MixedMeasure lower_x = MixedMeasure(0, 0);
+    MixedMeasure lower_y = MixedMeasure(0, 0);
+    MixedMeasure upper_x = MixedMeasure(0, 1);
+    MixedMeasure upper_y = MixedMeasure(0, 1);
 
     public:
-    TuringPattern(std::shared_ptr<sf::Texture> anchor, std::shared_ptr<sf::Shader> shader) : anchor(anchor), shader(shader), sprites{Sprite(anchor, shader), Sprite(anchor, shader)} {
-        for (int i = 0; i < 2; i++) {
-            targets[i].create(anchor->getSize().x, anchor->getSize().y);
-            targets[i].clear(sf::Color::Transparent);
-            sprites[i].setTransform(
-                MixedMeasure(0, 0), 
-                MixedMeasure(0, 0), 
-                MixedMeasure(0, 1), 
-                MixedMeasure(0, 1), 
-                0
-            );
+    Filter(int width, int height, std::shared_ptr<sf::Shader> shader) : shader(shader) {
+        render_texture.create(width, height);
+        vertices.setPrimitiveType(sf::Quads);
+        vertices.resize(4);
+        vertices[0].position = sf::Vector2f(-0.f, -0.f);
+        vertices[1].position = sf::Vector2f(+1.f, -0.f);
+        vertices[2].position = sf::Vector2f(+1.f, +1.f);
+        vertices[3].position = sf::Vector2f(-0.f, +1.f);
+
+        output = std::make_shared<sf::Texture>(render_texture.getTexture());
+    }
+
+    void setTexture(std::shared_ptr<sf::Texture> texture) {
+        this->texture = texture;
+    }
+
+    void setShader(std::shared_ptr<sf::Shader> shader) {
+        this->shader = shader;
+    }
+
+    void setTransform(MixedMeasure lower_x, MixedMeasure lower_y, MixedMeasure upper_x, MixedMeasure upper_y, float rotation) {
+        this->lower_x = lower_x;
+        this->lower_y = lower_y;
+        this->upper_x = upper_x;
+        this->upper_y = upper_y;
+        this->rotation = rotation;
+    }
+
+    Eigen::Matrix3f getTransform(float width, float height) {
+        Eigen::Isometry2f rotation = Eigen::Isometry2f::Identity();
+        rotation.rotate(this->rotation);
+        Eigen::Matrix3f placement = Eigen::Matrix3f::Identity();
+        placement(0, 0) = upper_x.getPercentage(width) - lower_x.getPercentage(width);
+        placement(1, 1) = upper_y.getPercentage(height) - lower_y.getPercentage(height);
+        placement(0, 2) = lower_x.getPercentage(width);
+        placement(1, 2) = lower_y.getPercentage(height);
+
+        return placement * rotation.matrix();
+    }
+
+    const Filter* operator()(std::shared_ptr<sf::Texture> source) {
+        render_texture.clear(sf::Color::Transparent);
+        shader->setUniform("time", _time);
+        shader->setUniform("resolution", sf::Glsl::Vec2(source->getSize().x, source->getSize().y));
+        shader->setUniform("source", *source);
+        shader->setUniform("image", *texture);
+        shader->setUniform("transform", sf::Glsl::Mat3(getTransform(source->getSize().x, source->getSize().y).data()));
+        render_texture.draw(vertices, shader.get());
+        render_texture.display();
+        output = std::make_shared<sf::Texture>(render_texture.getTexture());
+        return this;
+    }
+    
+    const Filter* operator()(const Filter* source_ptr) {
+        std::shared_ptr<sf::Texture> source;
+        if (source_ptr == nullptr) {
+            source = std::make_shared<sf::Texture>(render_texture.getTexture());
+        } else {
+            source = source_ptr->output;
         }
+        render_texture.clear(sf::Color::Transparent);
+        shader->setUniform("time", _time);
+        shader->setUniform("resolution", sf::Glsl::Vec2(source->getSize().x, source->getSize().y));
+        shader->setUniform("source", *source);
+        shader->setUniform("image", *texture);
+        shader->setUniform("transform", sf::Glsl::Mat3(getTransform(source->getSize().x, source->getSize().y).data()));
+        render_texture.draw(vertices, shader.get());
+        render_texture.display();
+        output = std::make_shared<sf::Texture>(render_texture.getTexture());
+        return this;
     }
 
-    void setAnchor(std::shared_ptr<sf::Texture> anchor) {
-        this->anchor = anchor;
-        for (int i = 0; i < 2; i++) {
-            sprites[i].setTexture(anchor);
-        }
+    void draw(sf::RenderTarget& target) const {
+        target.draw(sf::Sprite(*output));
     }
-
-    void update(float time) {
-        int next_target = (current_target + 1) % 2;
-        targets[next_target].clear(sf::Color::Transparent);
-        shader->setUniform("anchor", *anchor);
-        shader->setUniform("time", time);
-        shader->setUniform("resolution", sf::Glsl::Vec2(anchor->getSize().x, anchor->getSize().y));
-        shader->setUniform("target", targets[current_target].getTexture());
-        sprites[current_target].draw(targets[next_target], time);
-        current_target = next_target;
-    }
-
-    void draw(sf::RenderTarget& target) {
-        sprites[current_target].draw(target);
-    }
-
 };
 
 int main()
@@ -198,46 +249,14 @@ int main()
     std::filesystem::path dir = std::filesystem::current_path();
     Shaders shaders;
     Textures textures;
+    textures.load("noise", "assets/textures/noise.png");
 
     // setup ocean
-    textures.load("noise", "assets/textures/noise.png");
     shaders.load("ocean", "assets/shaders/default.vert", "assets/shaders/ocean.frag");
-    Sprite ocean_sprite(textures.get("noise"), shaders.get("ocean"));
-    ocean_sprite.setTransform(
-        MixedMeasure(0, 0), 
-        MixedMeasure(0, 0), 
-        MixedMeasure(0, 1), 
-        MixedMeasure(0, 1), 
-        0
-    );
+    Filter ocean(width/4, height/4, shaders.get("ocean"));
+    shaders.load("default", "assets/shaders/default.vert", "assets/shaders/default.frag");
+    Filter upscale(width, height, shaders.get("default"));
 
-    // create a low-res canvas for me to draw on
-    constexpr int res = 256;
-    sf::RenderTexture canvas;
-    canvas.create(res, res * height / width);
-    canvas.clear(sf::Color::Transparent);
-    std::shared_ptr<sf::Texture> canvas_texture = std::make_shared<sf::Texture>(canvas.getTexture());
-
-    // setup
-    shaders.load("image", "assets/shaders/default.vert", "assets/shaders/image.frag");
-    Sprite canvas_sprite(canvas_texture, shaders.get("image"));
-    canvas_sprite.setTransform(
-        MixedMeasure(0, 0), 
-        MixedMeasure(0, 0), 
-        MixedMeasure(0, 1), 
-        MixedMeasure(0, 1), 
-        0
-    );
-
-
-    // turing pattern which uses the canvas sprite texture as the anchor
-    shaders.load("turing", "assets/shaders/default.vert", "assets/shaders/turing.frag");
-    canvas.clear(sf::Color::Transparent);
-    ocean_sprite.draw(canvas, 0.);
-    canvas_texture.get()->update(canvas.getTexture());
-    TuringPattern ocean_pattern(canvas_texture, shaders.get("turing"));
-
-    float time = 0;
     auto start = std::chrono::high_resolution_clock::now();
     while (window.isOpen())
     {
@@ -249,32 +268,10 @@ int main()
             }
         }
         auto end = std::chrono::high_resolution_clock::now();
-        time = std::chrono::duration<float>(end - start).count();
-
-        // alternative 1
-        //window.clear();
-        //ocean_sprite.draw(window, time);
-        //window.display();
-
-        // alternative 2
-        canvas.clear(sf::Color::Transparent);
-        ocean_sprite.draw(canvas, time);
-        canvas_texture.get()->update(canvas.getTexture());
+        _time = std::chrono::duration<float>(end - start).count();
 
         window.clear();
-        canvas_sprite.draw(window);
+        upscale(ocean(nullptr))->draw(window);
         window.display();
-
-        // alternative 3
-        //canvas.clear(sf::Color::Transparent);
-        //ocean_sprite.draw(canvas, time);
-        //canvas_texture.get()->update(canvas.getTexture());
-
-        //ocean_pattern.setAnchor(canvas_texture);
-        //ocean_pattern.update(time);
-
-        //window.clear();
-        //ocean_pattern.draw(window);
-        //window.display();
     }
 }
