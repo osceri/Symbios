@@ -208,7 +208,7 @@ int main()
     Functor copy(width, height, shaders.get("default"));
 
     shaders.load("ocean", "assets/shaders/default.vert", "assets/shaders/ocean.frag");
-    Functor ocean(width/2, height/2, shaders.get("ocean"));
+    Functor ocean(width/3, height/3, shaders.get("ocean"));
 
     shaders.load("shade", "assets/shaders/default.vert", "assets/shaders/shade.frag");
     Functor shade(width, height, shaders.get("shade"));
@@ -225,6 +225,9 @@ int main()
     shaders.load("multiply", "assets/shaders/default.vert", "assets/shaders/multiply.frag");
     BinaryFunctor multiply(width, height, shaders.get("multiply"));
 
+    shaders.load("cloud", "assets/shaders/default.vert", "assets/shaders/cloud.frag");
+    Functor cloud(width/3, height/3, shaders.get("cloud"));
+
     auto start = std::chrono::high_resolution_clock::now();
     while (window.isOpen())
     {
@@ -238,14 +241,19 @@ int main()
         auto end = std::chrono::high_resolution_clock::now();
         _time = std::chrono::duration<float>(end - start).count();
 
-        auto color = generate(nullptr);
-        auto shad = shadow(color);
-        for (int i = 0; i < 15; i++) {
-            shad = shade(shad);
-        }
+        //auto color = generate(nullptr);
+        //auto shad = shadow(color);
+        //for (int i = 0; i < 15; i++) {
+        //    shad = shade(shad);
+        //}
         
+        //window.clear();
+        //multiply(shad, color)->draw(window);
+        //window.display();
+
+
         window.clear();
-        multiply(shad, color)->draw(window);
+        copy(ocean(nullptr))->draw(window);
         window.display();
     }
 }

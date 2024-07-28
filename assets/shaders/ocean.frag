@@ -62,8 +62,20 @@ vec4 ocean(vec2 x) {
     return vec4(col, 1.0);
 }
 
+float cloud(vec2 x) {
+    // Time-varying FBM
+    float f = 0.0;
+    float a = 0.8;
+    vec2 st = uv * 5.;
+    for (int i = 0; i < 3; i++) {
+        st = vec2(1., 1.1) * st + vec2(time) * 0.005 / a;
+        f += fbm(st + f);
+        a *= 0.8;
+    }
+    
+    return f;
+}
 
 void main() {
-    vec4 col = ocean(uv);
-    color = col;
+    color = mix(ocean(uv), vec4(1.0), pow(clamp(cloud(uv) - 0.1, 0., 1.), .4));
 }
