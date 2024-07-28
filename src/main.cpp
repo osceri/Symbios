@@ -82,75 +82,10 @@ public:
     }
 };
 
-/*
-
-class Sprite {
-    std::shared_ptr<sf::Texture> texture;
+class Functor {
+    protected:
     std::shared_ptr<sf::Shader> shader;
-    sf::VertexArray vertices;
-
-    float rotation = 0.;
-    MixedMeasure lower_x = MixedMeasure(0, 0);
-    MixedMeasure lower_y = MixedMeasure(0, 0);
-    MixedMeasure upper_x = MixedMeasure(0, 1);
-    MixedMeasure upper_y = MixedMeasure(0, 1);
-public:
-    Sprite(std::shared_ptr<sf::Texture> texture, std::shared_ptr<sf::Shader> shader) : texture(texture), shader(shader) {
-        vertices.setPrimitiveType(sf::Quads);
-        vertices.resize(4);
-        vertices[0].position = sf::Vector2f(-0.f, -0.f);
-        vertices[1].position = sf::Vector2f(+1.f, -0.f);
-        vertices[2].position = sf::Vector2f(+1.f, +1.f);
-        vertices[3].position = sf::Vector2f(-0.f, +1.f);
-    }
-
-    Eigen::Matrix3f getTransform(float width, float height) {
-        Eigen::Isometry2f rotation = Eigen::Isometry2f::Identity();
-        rotation.rotate(this->rotation);
-        Eigen::Matrix3f placement = Eigen::Matrix3f::Identity();
-        placement(0, 0) = upper_x.getPercentage(width) - lower_x.getPercentage(width);
-        placement(1, 1) = upper_y.getPercentage(height) - lower_y.getPercentage(height);
-        placement(0, 2) = lower_x.getPercentage(width);
-        placement(1, 2) = lower_y.getPercentage(height);
-
-        return placement * rotation.matrix();
-    }
-
-    void setTexture(std::shared_ptr<sf::Texture> texture) {
-        this->texture = texture;
-    }
-
-    void setTransform(MixedMeasure lower_x, MixedMeasure lower_y, MixedMeasure upper_x, MixedMeasure upper_y, float rotation) {
-        this->lower_x = lower_x;
-        this->lower_y = lower_y;
-        this->upper_x = upper_x;
-        this->upper_y = upper_y;
-        this->rotation = rotation;
-    }
-
-    void draw(sf::RenderTarget& target) {
-        Eigen::Matrix3f transform_matrix = getTransform(target.getSize().x, target.getSize().y);
-
-        shader->setUniform("transform", sf::Glsl::Mat3(transform_matrix.data()));
-        shader->setUniform("image", *texture);
-        shader->setUniform("resolution", sf::Glsl::Vec2(target.getSize().x, target.getSize().y));
-        target.draw(vertices, shader.get());
-    }
-
-    void draw(sf::RenderTarget& target, float time) {
-        shader->setUniform("time", time);
-        draw(target);
-    }
-};
-
-*/
-
-class Filter {
-    std::shared_ptr<sf::Shader> shader;
-    std::shared_ptr<sf::Texture> texture;
-
-    sf::RenderTexture render_texture;
-    std::shared_ptr<sf::Texture> output;
+    sf::RenderTexture render;
 
     // vertices of a quad
     sf::VertexArray vertices;
@@ -161,8 +96,10 @@ class Filter {
     MixedMeasure upper_y = MixedMeasure(0, 1);
 
     public:
-    Filter(int width, int height, std::shared_ptr<sf::Shader> shader) : shader(shader) {
-        render_texture.create(width, height);
+    std::shared_ptr<sf::Texture> output;
+
+    Functor(int width, int height, std::shared_ptr<sf::Shader> shader) : shader(shader) {
+        render.create(width, height);
         vertices.setPrimitiveType(sf::Quads);
         vertices.resize(4);
         vertices[0].position = sf::Vector2f(-0.f, -0.f);
@@ -170,11 +107,11 @@ class Filter {
         vertices[2].position = sf::Vector2f(+1.f, +1.f);
         vertices[3].position = sf::Vector2f(-0.f, +1.f);
 
-        output = std::make_shared<sf::Texture>(render_texture.getTexture());
+        output = std::make_shared<sf::Texture>(render.getTexture());
     }
 
-    void setTexture(std::shared_ptr<sf::Texture> texture) {
-        this->texture = texture;
+    void clear() {
+        output = std::make_shared<sf::Texture>(render.getTexture());
     }
 
     void setShader(std::shared_ptr<sf::Shader> shader) {
@@ -201,40 +138,56 @@ class Filter {
         return placement * rotation.matrix();
     }
 
-    const Filter* operator()(std::shared_ptr<sf::Texture> source) {
-        render_texture.clear(sf::Color::Transparent);
-        shader->setUniform("time", _time);
-        shader->setUniform("resolution", sf::Glsl::Vec2(source->getSize().x, source->getSize().y));
-        shader->setUniform("source", *source);
-        shader->setUniform("image", *texture);
-        shader->setUniform("transform", sf::Glsl::Mat3(getTransform(source->getSize().x, source->getSize().y).data()));
-        render_texture.draw(vertices, shader.get());
-        render_texture.display();
-        output = std::make_shared<sf::Texture>(render_texture.getTexture());
-        return this;
-    }
-    
-    const Filter* operator()(const Filter* source_ptr) {
+    const Functor* operator()(const Functor* source_ptr) {
         std::shared_ptr<sf::Texture> source;
         if (source_ptr == nullptr) {
-            source = std::make_shared<sf::Texture>(render_texture.getTexture());
+            source = std::make_shared<sf::Texture>(render.getTexture());
         } else {
             source = source_ptr->output;
         }
-        render_texture.clear(sf::Color::Transparent);
+        render.clear(sf::Color::Transparent);
         shader->setUniform("time", _time);
         shader->setUniform("resolution", sf::Glsl::Vec2(source->getSize().x, source->getSize().y));
         shader->setUniform("source", *source);
-        shader->setUniform("image", *texture);
         shader->setUniform("transform", sf::Glsl::Mat3(getTransform(source->getSize().x, source->getSize().y).data()));
-        render_texture.draw(vertices, shader.get());
-        render_texture.display();
-        output = std::make_shared<sf::Texture>(render_texture.getTexture());
+        render.draw(vertices, shader.get());
+        render.display();
+        output = std::make_shared<sf::Texture>(render.getTexture());
         return this;
     }
 
     void draw(sf::RenderTarget& target) const {
         target.draw(sf::Sprite(*output));
+    }
+};
+
+class BinaryFunctor : public Functor {
+public:
+    BinaryFunctor(int width, int height, std::shared_ptr<sf::Shader> shader) : Functor(width, height, shader) {}
+
+    const BinaryFunctor* operator()(const Functor* source_ptr_1, const Functor* source_ptr_2) {
+        std::shared_ptr<sf::Texture> source_1;
+        std::shared_ptr<sf::Texture> source_2;
+        if (source_ptr_1 == nullptr) {
+            source_1 = std::make_shared<sf::Texture>(render.getTexture());
+        } else {
+            source_1 = source_ptr_1->output;
+        }
+        if (source_ptr_2 == nullptr) {
+            source_2 = std::make_shared<sf::Texture>(render.getTexture());
+        } else {
+            source_2 = source_ptr_2->output;
+        }
+        render.clear(sf::Color::Transparent);
+        shader->setUniform("time", _time);
+        shader->setUniform("resolution", sf::Glsl::Vec2(source_1->getSize().x, source_1->getSize().y));
+        shader->setUniform("source_1", *source_1);
+        shader->setUniform("source_2", *source_2);
+        shader->setUniform("transform", sf::Glsl::Mat3(getTransform(source_1->getSize().x, source_1->getSize().y).data()));
+        render.draw(vertices, shader.get());
+        render.display();
+        output = std::make_shared<sf::Texture>(render.getTexture());
+        return this;
     }
 };
 
@@ -251,11 +204,26 @@ int main()
     Textures textures;
     textures.load("noise", "assets/textures/noise.png");
 
-    // setup ocean
-    shaders.load("ocean", "assets/shaders/default.vert", "assets/shaders/ocean.frag");
-    Filter ocean(width/4, height/4, shaders.get("ocean"));
     shaders.load("default", "assets/shaders/default.vert", "assets/shaders/default.frag");
-    Filter upscale(width, height, shaders.get("default"));
+    Functor copy(width, height, shaders.get("default"));
+
+    shaders.load("ocean", "assets/shaders/default.vert", "assets/shaders/ocean.frag");
+    Functor ocean(width/2, height/2, shaders.get("ocean"));
+
+    shaders.load("shade", "assets/shaders/default.vert", "assets/shaders/shade.frag");
+    Functor shade(width, height, shaders.get("shade"));
+
+    shaders.load("generate", "assets/shaders/default.vert", "assets/shaders/generate.frag");
+    Functor generate(width, height, shaders.get("generate"));
+
+    shaders.load("shadow", "assets/shaders/default.vert", "assets/shaders/shadow.frag");
+    Functor shadow(width, height, shaders.get("shadow"));
+
+    shaders.load("clear", "assets/shaders/default.vert", "assets/shaders/clear.frag");
+    Functor clear(width, height, shaders.get("clear"));
+
+    shaders.load("multiply", "assets/shaders/default.vert", "assets/shaders/multiply.frag");
+    BinaryFunctor multiply(width, height, shaders.get("multiply"));
 
     auto start = std::chrono::high_resolution_clock::now();
     while (window.isOpen())
@@ -270,8 +238,14 @@ int main()
         auto end = std::chrono::high_resolution_clock::now();
         _time = std::chrono::duration<float>(end - start).count();
 
+        auto color = generate(nullptr);
+        auto shad = shadow(color);
+        for (int i = 0; i < 15; i++) {
+            shad = shade(shad);
+        }
+        
         window.clear();
-        upscale(ocean(nullptr))->draw(window);
+        multiply(shad, color)->draw(window);
         window.display();
     }
 }
