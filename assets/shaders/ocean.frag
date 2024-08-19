@@ -49,33 +49,67 @@ vec4 ocean(vec2 x) {
     // Time-varying FBM
     float f = 0.0;
     float a = 0.8;
-    vec2 st = uv;
+    float da = 0.5;
+
+    vec2 st = uv - 0.005 * time;
     for (int i = 0; i < 3; i++) {
-        vec2 q = 2.0 * st;
-        f += fbm(q + f / a - 0.005 * time);
-        a *= 0.5;
+        st = 1.7 * st;
+        f += 0.7 * fbm(st + f / a);
+        a *= da;
     }
     
-    vec3 col = mix(vec3(0.0, 0.3, 0.5), vec3(0.0, 0.7, 1.0), f);
+    vec3 col = mix(vec3(0.0, 0.3, 0.5), vec3(0.0, 0.7, 0.9), f);
     col = mix(col, pow(col, vec3(0.1545)), 0.1);
 
+
     return vec4(col, 1.0);
+}
+
+
+float waves(vec2 x) {
+    // Time-varying FBM
+    float f = 0.0;
+    float a = 0.8;
+    float da = 0.5;
+
+    vec2 st = uv;
+    for (int i = 0; i < 3; i++) {
+        st = 3.7 * st + 0.1 * pow(a, -3.);
+        f += 1.0 * fbm(st + f / a - 0.05 * time);
+        a *= da;
+    }
+    
+    return pow(clamp(f, 0.05, 0.40), 2.);
+}
+
+vec2 rotate(vec2 v, float a) {
+    return vec2(cos(a) * v.x - sin(a) * v.y, sin(a) * v.x + cos(a) * v.y);
 }
 
 float cloud(vec2 x) {
     // Time-varying FBM
     float f = 0.0;
     float a = 0.8;
+    float da = 0.8;
+
+    float s = 1.8 + 0.6 * sin(time / 80.);
+    float df = -0.05 + 0.1 * sin(time / 160.);
+
     vec2 st = uv * 5.;
-    for (int i = 0; i < 3; i++) {
-        st = vec2(1., 1.1) * st + vec2(time) * 0.005 / a;
-        f += fbm(st + f);
-        a *= 0.8;
+    for (int i = 0; i < 2; i++) {
+        st = st + vec2(time) * 0.005 * pow(a, -4.);
+        f += s * fbm(st + f) + df;
+        a *= da;
     }
     
     return f;
 }
 
 void main() {
-    color = mix(ocean(uv), vec4(1.0), pow(clamp(cloud(uv) - 0.1, 0., 1.), .4));
+    vec4 col = ocean(uv);
+    col = mix(col, vec4(0.0, 0.0, 0.0, 1.0), waves(uv));
+    col = mix(col, vec4(0.4, 0.4, 0.6, 1.0), pow(clamp(cloud(uv) - 0.15, 0., 1.), .2));
+    col = mix(col, vec4(1.0, 1.0, 1.0, 1.0), pow(clamp(cloud(uv) - 0.25, 0., 1.), .4));
+
+    color = col;
 }
